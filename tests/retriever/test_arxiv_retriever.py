@@ -4,6 +4,7 @@ import time
 from types import SimpleNamespace
 
 import feedparser
+import pytest
 
 from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
 import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
@@ -229,6 +230,40 @@ def test_retrieve_raw_papers_debug_mode(config, mock_feedparser, monkeypatch):
     retriever = ArxivRetriever(config)
     raw = retriever._retrieve_raw_papers()
     assert len(raw) <= 10
+
+
+@pytest.mark.parametrize("debug", [False, True])
+def test_empty_feed_uses_recent_papers_only_in_debug(config, monkeypatch, debug):
+    config.executor.debug = debug
+    monkeypatch.setattr(arxiv_retriever.feedparser, "parse", lambda _: SimpleNamespace(
+        status=200, bozo=False, feed=SimpleNamespace(title="arXiv"), entries=[],
+    ))
+    recent_paper = SimpleNamespace(title="Recent paper")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert debug, "Daily runs must not fall back to older papers"
+
+        def results(self, search):
+            assert search.query == "cat:cs.AI OR cat:cs.CV"
+            assert search.max_results == 3
+            assert search.sort_by == arxiv_retriever.arxiv.SortCriterion.SubmittedDate
+            return iter([recent_paper])
+
+    monkeypatch.setattr(arxiv_retriever.arxiv, "Client", FakeClient)
+    assert ArxivRetriever(config)._retrieve_raw_papers() == ([recent_paper] if debug else [])
+
+
+def test_empty_debug_api_results_fail_explicitly(config, monkeypatch):
+    config.executor.debug = True
+    monkeypatch.setattr(arxiv_retriever.feedparser, "parse", lambda _: SimpleNamespace(
+        status=200, bozo=False, feed=SimpleNamespace(title="arXiv"), entries=[],
+    ))
+    monkeypatch.setattr(arxiv_retriever.arxiv, "Client", lambda **kwargs: SimpleNamespace(
+        results=lambda search: iter([]),
+    ))
+    with pytest.raises(RuntimeError, match="No papers available for the debug run"):
+        ArxivRetriever(config)._retrieve_raw_papers()
 
 
 def test_retrieve_raw_papers_retries_on_http_failure(config, mock_feedparser, monkeypatch):

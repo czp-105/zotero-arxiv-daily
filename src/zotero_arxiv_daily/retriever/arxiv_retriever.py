@@ -262,6 +262,18 @@ class ArxivRetriever(BaseRetriever):
             if i.get("arxiv_announce_type", "new") in allowed_announce_types
         ]
         if self.config.executor.debug:
+            if not target_entries:
+                logger.info("Empty RSS in debug mode; fetching 3 recent papers from the arXiv API")
+                search = arxiv.Search(
+                    query=" OR ".join(f"cat:{category}" for category in self.config.source.arxiv.category),
+                    max_results=3,
+                    sort_by=arxiv.SortCriterion.SubmittedDate,
+                    sort_order=arxiv.SortOrder.Descending,
+                )
+                recent_papers = list(arxiv.Client(page_size=3).results(search))
+                if not recent_papers:
+                    raise RuntimeError("No papers available for the debug run")
+                return recent_papers
             target_entries = target_entries[:10]
 
         seen_paper_ids = set()

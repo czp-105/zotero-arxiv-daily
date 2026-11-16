@@ -168,7 +168,7 @@ That's all! Now you can test the workflow by manually triggering it:
 ![test](./assets/test.png)
 
 > [!NOTE]
-> The Test-Workflow Action is the debug version of the main workflow (Send-emails-daily), which always retrieve 5 arxiv papers regardless of the date. While the main workflow will be automatically triggered everyday and retrieve new papers released yesterday. There is no new arxiv paper at weekends and holiday, in which case you may see "No new papers found" in the log of main workflow.
+> The Test workflow processes up to 10 matching arXiv RSS entries. If the feed is empty, test mode retrieves up to 3 recent papers from the arXiv API so setup can still be verified. The test sends a real email. The daily workflow only processes matching RSS announcements and may report "No new papers found" on days without new entries.
 
 Then check the log and the receiver email after it finishes.
 
