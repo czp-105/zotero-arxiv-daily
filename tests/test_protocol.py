@@ -1,8 +1,14 @@
 """Tests for zotero_arxiv_daily.protocol: Paper.generate_tldr, Paper.generate_affiliations."""
 
+import json
+
+import httpx
 import pytest
+from omegaconf import OmegaConf
+from openai import OpenAI
 
 from tests.canned_responses import make_sample_paper, make_stub_openai_client
+from zotero_arxiv_daily.protocol import _request_llm
 
 
 @pytest.fixture()
@@ -12,6 +18,35 @@ def llm_params():
         "language": "English",
         "generation_kwargs": {"model": "gpt-4o-mini", "max_tokens": 16384},
     }
+
+
+def test_nested_hydra_options_are_serialized_for_chat_api():
+    params = OmegaConf.create({
+        "model_name": "deepseek-flash",
+        "generation_kwargs": {
+            "model": "${model_name}",
+            "extra_body": {"thinking": {"type": "disabled"}},
+        },
+    })
+
+    def handle(request):
+        body = json.loads(request.content)
+        assert body["model"] == "deepseek-flash"
+        assert body["thinking"] == {"type": "disabled"}
+        return httpx.Response(200, json={
+            "id": "test-completion", "object": "chat.completion", "created": 0,
+            "model": "deepseek-flash",
+            "choices": [{
+                "index": 0, "finish_reason": "stop",
+                "message": {"role": "assistant", "content": "Summary"},
+            }],
+        })
+
+    with OpenAI(
+        api_key="test-key", base_url="https://example.invalid/v1",
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+    ) as client:
+        assert _request_llm(client, params, [{"role": "user", "content": "Summarize"}]) == "Summary"
 
 
 # ---------------------------------------------------------------------------

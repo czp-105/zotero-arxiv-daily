@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 import tiktoken
 from openai import OpenAI
+from omegaconf import DictConfig, OmegaConf
 from loguru import logger
 import json
 RawPaperItem = TypeVar('RawPaperItem')
@@ -11,7 +12,12 @@ RawPaperItem = TypeVar('RawPaperItem')
 
 def _request_llm(openai_client: OpenAI, llm_params: dict, messages: list[dict]) -> str:
     api_mode = llm_params.get("api_mode", "chat_completion")
-    generation_kwargs = dict(llm_params.get("generation_kwargs", {}))
+    generation_kwargs = llm_params.get("generation_kwargs", {})
+    generation_kwargs = (
+        OmegaConf.to_container(generation_kwargs, resolve=True)
+        if isinstance(generation_kwargs, DictConfig)
+        else dict(generation_kwargs)
+    )
 
     if api_mode == "chat_completion":
         response = openai_client.chat.completions.create(
